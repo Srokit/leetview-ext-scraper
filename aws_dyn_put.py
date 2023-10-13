@@ -12,7 +12,7 @@ def put_problem_hint_in_dyn_table(pid, hint):
     # Check success
     response = table.put_item(
          Item={
-            'problem_id': pid,
+            'prob_id': pid,
             'hint': hint
         }
     )
