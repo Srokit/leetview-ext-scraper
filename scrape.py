@@ -4,7 +4,15 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import *
 
-MAX_NUM_PROBLEMS_TO_SCRAPE = 25
+# Strings that are mistakes in the problemset page often
+NOT_ALLOWED_PROBLEM_IDS = [
+    "problems",
+]
+
+# NOTE: There is about 50 problems per page so multiply that by this
+# number to get the total number of problems to scrape
+# -1 means scrape all pages
+MAX_NUM_PAGES_FOR_PROBLEMSET = -1
 
 def problem_desc_url(pid):
     return 'https://leetcode.com/problems/{}/description/'.format(pid)
@@ -26,6 +34,17 @@ def init_driver():
     driver.set_page_load_timeout(10)
     print("Started Browser and Driver")
     return driver
+
+def make_des_and_sol_scrape_progress_info_str(num_total, num_scraped, time_elapsed):
+    eta_sec = (num_total - num_scraped) * (time_elapsed / num_scraped)
+    eta_min = eta_sec / 60
+    eta_hr = eta_min / 60
+    # floats to 2 decimal places
+    eta_sec = "{:.2f}".format(eta_sec)
+    eta_min = "{:.2f}".format(eta_min)
+    eta_hr = "{:.2f}".format(eta_hr)
+    time_elapsed = "{:.2f}".format(time_elapsed)
+    return "Scraped {}/{} problems. Time elapsed: {} seconds. ETA: {} seconds, {} minutes, {} hours".format(num_scraped, num_total, time_elapsed, eta_sec, eta_min, eta_hr)
 
 def scrape_description_and_solution(pid):
     print("START scrape desc and sol for problem id: {}".format(pid))
@@ -73,36 +92,53 @@ def scrape_for_problem_ids():
     try:
         driver = init_driver()
         driver.get(PROBLEMSET_ALL_URL)
+    except Exception as e:
+        print("Error getting original problemset page : ", e)
+        driver.quit()
+        return None
 
-        driver.save_screenshot('screenshot.png')
-
-        page_index = 0
-        while page_index < MAX_NUM_PROBLEMS_TO_SCRAPE:
-            # Get all the a tags with attribute href starting with /problems/* and is not equal to /problems/
+    page_index = 0
+    cond = page_index < MAX_NUM_PAGES_FOR_PROBLEMSET
+    if MAX_NUM_PAGES_FOR_PROBLEMSET == -1:
+        cond = True
+    while cond:
+        # Get all the a tags with attribute href starting with /problems/* and is not equal to /problems/
+        try:
             problem_links = driver.find_elements_by_xpath("//a[starts-with(@href, '/problems/') and not(@href='/problems/')]")
             for link in problem_links:
                 try:
                     problem_id = link.get_attribute('href').split('/')[-2]
+                    if problem_id in NOT_ALLOWED_PROBLEM_IDS:
+                        continue
                     print("Adding problem id: {} to set".format(problem_id))
                     set_of_problem_ids.add(problem_id)
                 except:
                     print("Saw a link not work")
                     continue
+        except Exception as e:
+            print("Error while trying to find problem links: ", e)
+            print("Skipping to next page")
+            page_index += 1
+            continue
 
+        try:
             # If more pages to scrape, click the next page button and repeat
             # The next page button has attribute aria-label="next"
             # if it has attribute disabled, then there are no more pages to scrape
-            # next_page_button = driver.find_element_by_xpath("//button[@aria-label='next']")
-            break
+            print("Looking for next page button...")
+            next_page_button = driver.find_element_by_xpath("//button[@aria-label='next']")
             if not next_page_button.get_attribute('disabled'):
                 next_page_button.click()
             else:
+                print("Saw no next button. No more pages to scrape")
                 break
-            page_index += 1
+        except Exception as e:
+            print("Error while trying to find and click next button: ", e)
+            print("Ending loop")
+            break
+        page_index += 1
+        print("Moving to next page now at index: {}".format(page_index))
 
-    except Exception as e:
-        print("Error: ", e)
-        raise e
-
+    driver.quit()
     return list(set_of_problem_ids)
 

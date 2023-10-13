@@ -7,13 +7,15 @@ import os
 
 import openai
 
+NUM_CHOICES = 4
+
 OPENAI_KEY = os.environ.get("OPENAI_KEY")
 if OPENAI_KEY is None:
     raise Exception("OPENAI_KEY environment variable not set.")
 
-def request_hint(problem_description, problem_solution):
+def request_hints(problem_description, problem_solution):
     """
-    Request a hint from the OpenAI API.
+    Request a list of hints from the OpenAI API.
     """
 
     openai.api_key = OPENAI_KEY
@@ -51,22 +53,9 @@ Do not give the candidate the full solution.
                 "content": user_asking_message,
             },
         ],
+        n=NUM_CHOICES,
     )
 
-    # first_response = chat_completion.choices[0].message.content
-
-    # get_rid_of_first_part_of_hint_message = "Remove first the part of this message where the interviewer explains that it will give a hint :\n{}".format(first_response)
-
-    # chat_completion = openai.ChatCompletion.create(
-    #     model="gpt-4",
-    #     messages=[
-    #         {
-    #             "role": "user",
-    #             "content": get_rid_of_first_part_of_hint_message,
-    #         },
-    #     ],
-    # )
-
-    response = chat_completion.choices[0].message.content
-    return response
+    responses = [c['message']['content'] for c in chat_completion['choices']]
+    return responses
 
