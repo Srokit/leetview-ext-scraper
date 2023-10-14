@@ -1,3 +1,5 @@
+import time
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as Options
 from selenium.webdriver.common.action_chains import ActionChains
@@ -8,6 +10,8 @@ from selenium.common.exceptions import *
 NOT_ALLOWED_PROBLEM_IDS = [
     "problems",
 ]
+
+WAIT_FOR_LINKS_TO_LOAD_SEC = 2
 
 # NOTE: There is about 50 problems per page so multiply that by this
 # number to get the total number of problems to scrape
@@ -29,6 +33,16 @@ PROBLEMSET_ALL_URL = 'https://leetcode.com/problemset/all/'
 def init_driver():
     options = Options()
     options.add_argument("--headless") # Runs Chrome in headless mode.
+
+    # Chromedriver potentially requires these weird options
+    # https://stackoverflow.com/questions/48450594/selenium-timed-out-receiving-message-from-renderer
+    options.add_argument("--start-maximized"); # https://stackoverflow.com/a/26283818/1689770
+    options.add_argument("--enable-automation"); # https://stackoverflow.com/a/43840128/1689770
+    options.add_argument("--no-sandbox"); #https://stackoverflow.com/a/50725918/1689770
+    options.add_argument("--disable-dev-shm-usage"); #https://stackoverflow.com/a/50725918/1689770
+    options.add_argument("--disable-browser-side-navigation"); #https://stackoverflow.com/a/49123152/1689770
+    options.add_argument("--disable-gpu"); #https://stackoverflow.com/questions/51959986/how-to-solve-selenium-chromedriver-timed-out-receiving-message-from-renderer-exc
+
     driver = webdriver.Chrome(chrome_options=options)
     driver.implicitly_wait(10)
     driver.set_page_load_timeout(10)
@@ -104,6 +118,10 @@ def scrape_for_problem_ids():
     while cond:
         # Get all the a tags with attribute href starting with /problems/* and is not equal to /problems/
         try:
+            # Wait before getting problem links to let them load in
+            print("Waiting for links to load...")
+            time.sleep(WAIT_FOR_LINKS_TO_LOAD_SEC)
+            print("Looking for problem links...")
             problem_links = driver.find_elements_by_xpath("//a[starts-with(@href, '/problems/') and not(@href='/problems/')]")
             for link in problem_links:
                 try:
