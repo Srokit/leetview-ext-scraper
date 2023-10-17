@@ -1,7 +1,8 @@
 import time
-
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as Options
+from selenium.webdriver.chrome.service import Service as Service
+from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import *
@@ -11,7 +12,7 @@ NOT_ALLOWED_PROBLEM_IDS = [
     "problems",
 ]
 
-WAIT_FOR_LINKS_TO_LOAD_SEC = 2
+WAIT_FOR_LINKS_TO_LOAD_SEC = 1
 
 # NOTE: There is about 50 problems per page so multiply that by this
 # number to get the total number of problems to scrape
@@ -30,49 +31,50 @@ def problem_single_solution_url(pid, sid):
 # Const problemset all url
 PROBLEMSET_ALL_URL = 'https://leetcode.com/problemset/all/'
 
+CHROMEDRIVER_LOCATION = "/Users/srok/Dev/libs/chromedriver/chromedriver_mac64/chromedriver"
+
+CHROME_LOCATION = "/Users/srok/Dev/libs/chromium/mac_arm-114.0.5735.133/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+
 def init_driver():
     options = Options()
-    options.add_argument("--headless") # Runs Chrome in headless mode.
+    # options.add_argument("--headless") # Runs Chrome in headless mode.
 
-    # Chromedriver potentially requires these weird options
-    # https://stackoverflow.com/questions/48450594/selenium-timed-out-receiving-message-from-renderer
-    options.add_argument("--start-maximized"); # https://stackoverflow.com/a/26283818/1689770
-    options.add_argument("--enable-automation"); # https://stackoverflow.com/a/43840128/1689770
-    options.add_argument("--no-sandbox"); #https://stackoverflow.com/a/50725918/1689770
-    options.add_argument("--disable-dev-shm-usage"); #https://stackoverflow.com/a/50725918/1689770
-    options.add_argument("--disable-browser-side-navigation"); #https://stackoverflow.com/a/49123152/1689770
-    options.add_argument("--disable-gpu"); #https://stackoverflow.com/questions/51959986/how-to-solve-selenium-chromedriver-timed-out-receiving-message-from-renderer-exc
+    # # Chromedriver potentially requires these weird options
+    # # https://stackoverflow.com/questions/48450594/selenium-timed-out-receiving-message-from-renderer
+    # options.add_argument("--start-maximized"); # https://stackoverflow.com/a/26283818/1689770
+    # options.add_argument("--enable-automation"); # https://stackoverflow.com/a/43840128/1689770
+    # options.add_argument("--no-sandbox"); #https://stackoverflow.com/a/50725918/1689770
+    # options.add_argument("--disable-dev-shm-usage"); #https://stackoverflow.com/a/50725918/1689770
+    # options.add_argument("--disable-browser-side-navigation"); #https://stackoverflow.com/a/49123152/1689770
+    # options.add_argument("--disable-gpu"); #https://stackoverflow.com/questions/51959986/how-to-solve-selenium-chromedriver-timed-out-receiving-message-from-renderer-exc
 
-    driver = webdriver.Chrome(chrome_options=options)
+    # Set chromedriver location to CHROMEDRIVER_LOCATION
+    # set chrome location
+    # options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    options.binary_location = CHROME_LOCATION
+    service = Service(CHROMEDRIVER_LOCATION)
+    # set chromedriver location
+    driver = webdriver.Chrome(service=service, options=options)
     driver.implicitly_wait(10)
     driver.set_page_load_timeout(10)
-    print("Started Browser and Driver")
+    print("Init driver done")
     return driver
 
-def make_des_and_sol_scrape_progress_info_str(num_total, num_scraped, time_elapsed):
-    eta_sec = (num_total - num_scraped) * (time_elapsed / num_scraped)
-    eta_min = eta_sec / 60
-    eta_hr = eta_min / 60
-    # floats to 2 decimal places
-    eta_sec = "{:.2f}".format(eta_sec)
-    eta_min = "{:.2f}".format(eta_min)
-    eta_hr = "{:.2f}".format(eta_hr)
-    time_elapsed = "{:.2f}".format(time_elapsed)
-    return "Scraped {}/{} problems. Time elapsed: {} seconds. ETA: {} seconds, {} minutes, {} hours".format(num_scraped, num_total, time_elapsed, eta_sec, eta_min, eta_hr)
-
-def scrape_description_and_solution(pid):
+def scrape_description_and_solution(pid, driver):
     print("START scrape desc and sol for problem id: {}".format(pid))
     problem_description = None
     problem_solution = None
     try:
-        # Init driver
-        driver = init_driver()
 
         print("Going to problem description page")
         driver.get(problem_desc_url(pid))
 
+        # This may be a locked problem therefor set a low implicit wait to see it quick
+        driver.implicitly_wait(1)
         # Get the text content of the element with attribute data-track-load="description_content"
-        element = driver.find_element_by_xpath("//div[@data-track-load='description_content']")
+        element = driver.find_element(By.XPATH, "//div[@data-track-load='description_content']")
+        # Back to normal
+        driver.implicitly_wait(10)
         problem_description = element.text
 
         print("Going to problem all solutions page")
@@ -80,20 +82,19 @@ def scrape_description_and_solution(pid):
         driver.get(problem_all_solutions_url(pid))
 
         # Get the first a tag with attribute href starting with /problems/${problemId}/solutions/* and does not equal /problems/${problemId}/solutions/
-        solution_link = driver.find_element_by_xpath("//a[starts-with(@href, '/problems/{}/solutions/') and not(@href='/problems/{}/solutions/')]".format(pid, pid))
+        solution_link = driver.find_element(By.XPATH, "//a[starts-with(@href, '/problems/{}/solutions/') and not(@href='/problems/{}/solutions/')]".format(pid, pid))
 
         print("Going to problem solution page")
         # Follow the link to the solution page
         solution_link.click()
 
         # Get the problem solution text from a div where class="break-words"
-        element = driver.find_element_by_xpath("//div[@class='break-words']")
+        element = driver.find_element(By.XPATH, "//div[@class='break-words']")
         problem_solution = element.text
 
     except Exception as e:
         print("Error: ", e)
     finally:
-        driver.quit()
         print("END scrape")
 
     return problem_description, problem_solution
@@ -116,23 +117,37 @@ def scrape_for_problem_ids():
     if MAX_NUM_PAGES_FOR_PROBLEMSET == -1:
         cond = True
     while cond:
-        # Get all the a tags with attribute href starting with /problems/* and is not equal to /problems/
+        # Get all the a tags with attribute href starting with /problems/* and is not equal to /problems/ and whose class attribute does not contain the class opacity-60
         try:
             # Wait before getting problem links to let them load in
             print("Waiting for links to load...")
             time.sleep(WAIT_FOR_LINKS_TO_LOAD_SEC)
             print("Looking for problem links...")
-            problem_links = driver.find_elements_by_xpath("//a[starts-with(@href, '/problems/') and not(@href='/problems/')]")
+            problem_links = driver.find_elements(By.XPATH, "//a[starts-with(@href, '/problems/')]")
             for link in problem_links:
-                try:
-                    problem_id = link.get_attribute('href').split('/')[-2]
-                    if problem_id in NOT_ALLOWED_PROBLEM_IDS:
-                        continue
-                    print("Adding problem id: {} to set".format(problem_id))
-                    set_of_problem_ids.add(problem_id)
-                except:
-                    print("Saw a link not work")
+                parts = link.get_attribute('href').split('/')
+                if len(parts) < 2:
+                    print("LINKPROB: Not have problem_id")
                     continue
+                problem_id = parts[-1]
+                if problem_id.startswith('?'):
+                    print("LINKPROB: ?")
+                    continue
+                if problem_id in set_of_problem_ids:
+                    print("LINKPROB: duplicate: {}".format(problem_id))
+                    continue
+                if problem_id in NOT_ALLOWED_PROBLEM_IDS:
+                    print("LINKPROB: Not allowed: {}".format(problem_id))
+                    continue
+                class_attr = link.get_attribute('class')
+                if class_attr is not None and 'truncate' in class_attr:
+                    print("LINKPROB: Truncate: {}".format(problem_id))
+                    continue
+                if class_attr is not None and 'opacity-60' in class_attr:
+                    print("LINKPROB: Premium: {}".format(problem_id))
+                    continue
+                print("LINKSUCC: {}".format(problem_id))
+                set_of_problem_ids.add(problem_id)
         except Exception as e:
             print("Error while trying to find problem links: ", e)
             print("Skipping to next page")
@@ -144,7 +159,7 @@ def scrape_for_problem_ids():
             # The next page button has attribute aria-label="next"
             # if it has attribute disabled, then there are no more pages to scrape
             print("Looking for next page button...")
-            next_page_button = driver.find_element_by_xpath("//button[@aria-label='next']")
+            next_page_button = driver.find_element(By.XPATH, "//button[@aria-label='next']")
             if not next_page_button.get_attribute('disabled'):
                 next_page_button.click()
             else:
