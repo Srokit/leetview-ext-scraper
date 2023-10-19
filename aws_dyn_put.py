@@ -24,7 +24,14 @@ def put_problem_hint_in_dyn_table(pid, hint):
 def get_all_pids_in_dyn_table():
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('lv-prob-to-hint-table-v1')
+    # items = set(i['prob_id'] for i in response['Items'])
+
+    # Handle multiple pages of results
+    items = set()
     response = table.scan()
-    items = set(i['prob_id'] for i in response['Items'])
+    items.update(i['prob_id'] for i in response['Items'])
+    while 'LastEvaluatedKey' in response:
+        response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+        items.update(i['prob_id'] for i in response['Items'])
     return items
 
