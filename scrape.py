@@ -1,4 +1,6 @@
+import os
 import time
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as Options
 from selenium.webdriver.chrome.service import Service as Service
@@ -35,6 +37,16 @@ CHROMEDRIVER_LOCATION = "/Users/srok/Dev/libs/chromedriver/chromedriver_mac64/ch
 
 CHROME_LOCATION = "/Users/srok/Dev/libs/chromium/mac_arm-114.0.5735.133/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 
+def login_to_leetcode(driver):
+    print("START login")
+    driver.get("https://leetcode.com/accounts/login/")
+    time.sleep(3)
+    driver.find_element(By.ID, "id_login").send_keys(os.environ['LC_USER'])
+    driver.find_element(By.ID, "id_password").send_keys(os.environ['LC_PASS'])
+    driver.find_element(By.ID, "signin_btn").click()
+    time.sleep(3)
+    print("Logged in")
+
 def init_driver():
     options = Options()
     # options.add_argument("--headless") # Runs Chrome in headless mode.
@@ -58,7 +70,24 @@ def init_driver():
     driver.implicitly_wait(10)
     driver.set_page_load_timeout(10)
     print("Init driver done")
+
+    login_to_leetcode(driver)
+
     return driver
+
+def maybe_close_out_of_modal(driver):
+    # If the modal is on screen, with a button with text content contains "Try Out", click it
+    try:
+        print("Looking for modal")
+        driver.implicitly_wait(2)
+        MODAL_CLASS_CONTAINS = "z-base-9 absolute right-4 top-4 cursor-pointer"
+        # Find modal div whose class contains text MODAL_CLASS_CONTAINS
+        modal = driver.find_element(By.XPATH, "//div[contains(@class, '{}')]".format(MODAL_CLASS_CONTAINS))
+        print("Found modal")
+        modal.click()
+        print("Clicked modal")
+    except NoSuchElementException as e:
+        print("No modal found")
 
 def scrape_description_and_solution(pid, driver):
     print("START scrape desc and sol for problem id: {}".format(pid))
@@ -68,6 +97,8 @@ def scrape_description_and_solution(pid, driver):
 
         print("Going to problem description page")
         driver.get(problem_desc_url(pid))
+
+        maybe_close_out_of_modal(driver)
 
         # This may be a locked problem therefor set a low implicit wait to see it quick
         driver.implicitly_wait(1)

@@ -8,7 +8,6 @@ import pickle
 import time
 
 from aws_dyn_put import put_problem_hint_in_dyn_table
-from aws_dyn_put import check_if_problem_in_dyn_table
 
 from scrape import scrape_description_and_solution
 from scrape import init_driver
@@ -54,6 +53,8 @@ def main():
 
     desc_and_sol_by_pid_dict = load_existing_desc_and_sol()
     for pid in problem_ids:
+        if pid.strip() == '':
+            continue
         if pid in desc_and_sol_by_pid_dict:
             print("SKIPPING Problem id: {} already scraped".format(pid))
             continue
